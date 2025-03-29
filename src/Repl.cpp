@@ -1,10 +1,7 @@
+#include <iostream>
 #include <llvm/Support/raw_ostream.h>
-#include <memory>
 import Parser;
 import Token;
-
-#include <cstdio>
-#include <iostream>
 
 int main() {
   CodegenContext ctx;
