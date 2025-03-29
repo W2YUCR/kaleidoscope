@@ -1,4 +1,11 @@
 module;
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Verifier.h>
+
 #include <map>
 #include <memory>
 #include <vector>
@@ -6,11 +13,28 @@ module;
 export module Parser;
 
 import Token;
+using namespace llvm;
+
+export struct CodegenException : std::exception {
+  char const *what() const noexcept override { return "codegen error"; }
+};
+
+export struct CodegenContext {
+  std::unique_ptr<LLVMContext> ctx;
+  std::unique_ptr<Module> module;
+  std::unique_ptr<IRBuilder<>> builder;
+  std::map<std::string, Value *> named_values;
+  CodegenContext()
+      : ctx(std::make_unique<LLVMContext>()),
+        module(std::make_unique<Module>("my jit", *ctx)),
+        builder(std::make_unique<IRBuilder<>>(*ctx)) {}
+};
 
 namespace ast {
 export class Expr {
 public:
   virtual ~Expr() = default;
+  virtual Value *codegen(CodegenContext &ctx) = 0;
 };
 
 export class NumberExpr : public Expr {
@@ -18,6 +42,9 @@ export class NumberExpr : public Expr {
 
 public:
   NumberExpr(double value) : value(value) {}
+  Value *codegen(CodegenContext &ctx) override {
+    return ConstantFP::get(*ctx.ctx, APFloat(value));
+  }
 };
 
 export class VariableExpr : public Expr {
@@ -25,6 +52,12 @@ export class VariableExpr : public Expr {
 
 public:
   VariableExpr(std::string name) : name(name) {}
+  Value *codegen(CodegenContext &ctx) override {
+    auto e = ctx.named_values.find(name);
+    if (e == ctx.named_values.end())
+      throw CodegenException{};
+    return e->second;
+  }
 };
 
 export class BinaryExpr : public Expr {
@@ -35,6 +68,39 @@ public:
   BinaryExpr(std::string op, std::unique_ptr<Expr> lhs,
              std::unique_ptr<Expr> rhs)
       : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+  Value *codegen(CodegenContext &ctx) override {
+    auto lh = lhs->codegen(ctx);
+    auto rh = rhs->codegen(ctx);
+
+    static auto const cg =
+        std::map<std::string, std::function<Value *(CodegenContext & ctx,
+                                                    Value *, Value *)>>{
+            {"+",
+             [](CodegenContext &ctx, Value *lh, Value *rh) {
+               return ctx.builder->CreateFAdd(lh, rh, "addtmp");
+             }},
+            {"-",
+             [](CodegenContext &ctx, Value *lh, Value *rh) {
+               return ctx.builder->CreateFSub(lh, rh, "addtmp");
+             }},
+            {"*",
+             [](CodegenContext &ctx, Value *lh, Value *rh) {
+               return ctx.builder->CreateFMul(lh, rh, "addtmp");
+             }},
+            {"<",
+             [](CodegenContext &ctx, Value *lh, Value *rh) {
+               lh = ctx.builder->CreateFCmpULT(lh, rh, "cmptmp");
+               // Convert bool 0/1 to double 0.0 or 1.0
+               return ctx.builder->CreateUIToFP(lh, Type::getDoubleTy(*ctx.ctx),
+                                                "booltmp");
+             }},
+        };
+
+    if (auto e = cg.find(op); e != cg.end()) {
+      return e->second(ctx, lh, rh);
+    }
+    throw CodegenException{};
+  }
 };
 
 export class CallExpr : public Expr {
@@ -44,9 +110,26 @@ export class CallExpr : public Expr {
 public:
   CallExpr(std::string callee, std::vector<std::unique_ptr<Expr>> arguments)
       : callee(std::move(callee)), arguments(std::move(arguments)) {}
+  Value *codegen(CodegenContext &ctx) override {
+    // Look up the name in the global module table.
+    auto fn = ctx.module->getFunction(callee);
+    if (!fn)
+      throw CodegenException{};
+
+    // If argument mismatch error.
+    if (fn->arg_size() != arguments.size())
+      throw CodegenException{};
+
+    std::vector<Value *> args;
+    for (auto &arg : arguments) {
+      args.push_back(arg->codegen(ctx));
+    }
+
+    return ctx.builder->CreateCall(fn, args, "calltmp");
+  }
 };
 
-export class Prototype {
+export class Prototype : public Expr {
   std::string name;
   std::vector<std::string> arguments;
 
@@ -55,15 +138,60 @@ public:
       : name(std::move(name)), arguments(std::move(arguments)) {}
 
   const std::string &get_name() const { return name; }
+  Function *codegen(CodegenContext &ctx) override {
+    std::vector<Type *> parameters(arguments.size(),
+                                   Type::getDoubleTy(*ctx.ctx));
+
+    auto func_type =
+        FunctionType::get(Type::getDoubleTy(*ctx.ctx), parameters, false);
+
+    auto func = Function::Create(func_type, Function::ExternalLinkage, name,
+                                 ctx.module.get());
+
+    auto arg = arguments.begin();
+    for (auto &func_arg : func->args())
+      func_arg.setName(*arg++);
+
+    return func;
+  }
 };
 
-export class Function {
+export class Function : public Expr {
   std::unique_ptr<Prototype> prototype;
   std::unique_ptr<Expr> body;
 
 public:
   Function(std::unique_ptr<Prototype> prototype, std::unique_ptr<Expr> body)
       : prototype(std::move(prototype)), body(std::move(body)) {}
+
+  Value *codegen(CodegenContext &ctx) override {
+    auto func = ctx.module->getFunction(prototype->get_name());
+    if (!func)
+      func = prototype->codegen(ctx);
+    return nullptr; // fixme
+
+    auto *block = BasicBlock::Create(*ctx.ctx, "entry", func);
+    ctx.builder->SetInsertPoint(block);
+
+    // Record the function arguments in the NamedValues map.
+    ctx.named_values.clear();
+    for (auto &arg : func->args())
+      ctx.named_values[std::string(arg.getName())] = &arg;
+
+    Value *ret;
+    try {
+      ret = body->codegen(ctx);
+    } catch (CodegenException c) {
+      func->eraseFromParent();
+      throw c;
+    }
+
+    ctx.builder->CreateRet(ret);
+
+    verifyFunction(*func);
+
+    return func;
+  }
 };
 
 } // namespace ast
@@ -200,6 +328,7 @@ public:
 
     if (peek().type != Token::TypeLpar)
       throw ParseError{};
+    next();
 
     std::vector<std::string> args;
     while (peek().type == Token::TypeIdentifier)
@@ -239,6 +368,14 @@ public:
     while (peek().type == Token::TypeSemicolon) {
       next();
     }
-    return parse_expression();
+
+    switch (peek().type) {
+    case Token::TypeDef:
+      return parse_definition();
+    case Token::TypeExtern:
+      return parse_extern();
+    default:
+      return parse_expression();
+    }
   }
 };
