@@ -168,7 +168,6 @@ public:
     auto func = ctx.module->getFunction(prototype->get_name());
     if (!func)
       func = prototype->codegen(ctx);
-    return nullptr; // fixme
 
     auto *block = BasicBlock::Create(*ctx.ctx, "entry", func);
     ctx.builder->SetInsertPoint(block);
