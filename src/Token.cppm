@@ -18,7 +18,9 @@ export class Token {
   TT(TypeNumber)                                                               \
   TT(TypeLpar)                                                                 \
   TT(TypeRpar)                                                                 \
-  TT(TypeOperator)
+  TT(TypeOperator)                                                             \
+  TT(TypeSemicolon)                                                            \
+  TT(TypeComma)
 
 #define TT(x) #x,
   constexpr static std::string const type_str[] = {TOKENTYPES};
@@ -94,15 +96,22 @@ public:
       return s;
     }
 
-    if (c == '(') {
+    switch (c) {
+    case '(':
       t.type = TypeLpar;
       t.literal = '(';
       return s;
-    }
-
-    if (c == ')') {
+    case ')':
       t.type = TypeRpar;
       t.literal = ')';
+      return s;
+    case ';':
+      t.type = TypeSemicolon;
+      t.literal = ';';
+      return s;
+    case ',':
+      t.type = TypeComma;
+      t.literal = ',';
       return s;
     }
 
@@ -112,7 +121,7 @@ public:
       t.literal.push_back(c);
       c = s.get();
     } while (!(s.eof() || isspace(c) || isalnum(c) || c == '.' || c == '(' ||
-               c == ')'));
+               c == ')' || c == ';'));
     s.unget();
     s.clear();
 
