@@ -36,7 +36,7 @@ public:
   std::string literal;
   double number;
 
-  bool operator<=>(const Token &) const = default;
+  auto operator<=>(const Token &) const = default;
 
   friend std::istream &operator>>(std::istream &s, Token &t) {
     if (s.fail())
