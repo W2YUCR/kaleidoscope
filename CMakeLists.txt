@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.28)
 project(Kaleidoscope)
 
 find_package(LLVM REQUIRED CONFIG)
+llvm_map_components_to_libnames(llvm_libs support core irreader)
 
 include(CTest)
 
