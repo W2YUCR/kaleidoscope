@@ -23,7 +23,7 @@ export class Token {
   TT(TypeComma)
 
 #define TT(x) #x,
-  constexpr static std::string const type_str[] = {TOKENTYPES};
+  constexpr static char const *const type_str[] = {TOKENTYPES};
 #undef TT
 
 public:

@@ -1,14 +1,20 @@
 module;
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Verifier.h>
+#include <stdexcept>
 
 #include <map>
 #include <memory>
 #include <vector>
+
+#include "KaleidoscopeJIT.hpp"
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Support/Error.h>
 
 export module Parser;
 
@@ -19,15 +25,29 @@ export struct CodegenException : std::exception {
   char const *what() const noexcept override { return "codegen error"; }
 };
 
+namespace ast {
+export class Prototype;
+}
+
 export struct CodegenContext {
   std::unique_ptr<LLVMContext> ctx;
   std::unique_ptr<Module> module;
   std::unique_ptr<IRBuilder<>> builder;
   std::map<std::string, Value *> named_values;
-  CodegenContext()
-      : ctx(std::make_unique<LLVMContext>()),
-        module(std::make_unique<Module>("my jit", *ctx)),
-        builder(std::make_unique<IRBuilder<>>(*ctx)) {}
+  std::map<std::string, std::shared_ptr<ast::Prototype>> *prototypes;
+
+  CodegenContext(
+      orc::KaleidoscopeJIT *jit,
+      std::map<std::string, std::shared_ptr<ast::Prototype>> *prototypes)
+      : prototypes(prototypes) {
+    ctx = std::make_unique<LLVMContext>();
+    module = std::make_unique<Module>("my jit", *ctx);
+    builder = std::make_unique<IRBuilder<>>(*ctx);
+    module->setDataLayout(jit->getDataLayout());
+    // todo: add the optimization passes
+  }
+
+  llvm::Function *get_proto(std::string name);
 };
 
 namespace ast {
@@ -110,9 +130,10 @@ export class CallExpr : public Expr {
 public:
   CallExpr(std::string callee, std::vector<std::unique_ptr<Expr>> arguments)
       : callee(std::move(callee)), arguments(std::move(arguments)) {}
+
   Value *codegen(CodegenContext &ctx) override {
     // Look up the name in the global module table.
-    auto fn = ctx.module->getFunction(callee);
+    auto fn = ctx.get_proto(callee);
     if (!fn)
       throw CodegenException{};
 
@@ -157,15 +178,18 @@ public:
 };
 
 export class Function : public Expr {
-  std::unique_ptr<Prototype> prototype;
+  std::shared_ptr<Prototype> prototype;
   std::unique_ptr<Expr> body;
 
 public:
   Function(std::unique_ptr<Prototype> prototype, std::unique_ptr<Expr> body)
       : prototype(std::move(prototype)), body(std::move(body)) {}
 
+  std::string const &get_name() const { return prototype->get_name(); }
+
   Value *codegen(CodegenContext &ctx) override {
-    auto func = ctx.module->getFunction(prototype->get_name());
+    (*ctx.prototypes)[prototype->get_name()] = prototype;
+    auto func = ctx.get_proto(prototype->get_name());
     if (!func)
       func = prototype->codegen(ctx);
 
@@ -353,7 +377,8 @@ public:
 
   std::unique_ptr<ast::Function> parse_top_level() {
     return std::make_unique<ast::Function>(
-        std::make_unique<ast::Prototype>("", std::vector<std::string>{}),
+        std::make_unique<ast::Prototype>("__anon_expr",
+                                         std::vector<std::string>{}),
         parse_expression());
   }
 
@@ -374,7 +399,17 @@ public:
     case Token::TypeExtern:
       return parse_extern();
     default:
-      return parse_expression();
+      return parse_top_level();
     }
   }
 };
+
+llvm::Function *CodegenContext::get_proto(std::string name) {
+  if (auto *func = module->getFunction(name))
+    return func;
+
+  if (auto e = prototypes->find(name); e != prototypes->end())
+    return e->second.get()->codegen(*this);
+
+  return nullptr;
+}
