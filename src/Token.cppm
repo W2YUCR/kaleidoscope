@@ -3,6 +3,7 @@ module;
 #include <istream>
 #include <ostream>
 #include <string>
+#include <string_view>
 
 export module Token;
 
@@ -23,7 +24,7 @@ export class Token {
   TT(TypeComma)
 
 #define TT(x) #x,
-  constexpr static std::string const type_str[] = {TOKENTYPES};
+  constexpr static std::string_view const type_str[] = {TOKENTYPES};
 #undef TT
 
 public:
