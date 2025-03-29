@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
 
-
 project(Kaleidoscope)
+
+find_package(LLVM REQUIRED CONFIG)
+
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
