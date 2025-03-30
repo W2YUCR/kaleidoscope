@@ -1,9 +1,21 @@
-#include "KaleidoscopeJIT.hpp"
+#include "llvm-c/Target.h"
+#include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/Orc/Core.h"
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
+#include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Value.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/raw_ostream.h"
+
 #include <iostream>
-#include <llvm/ExecutionEngine/Orc/Core.h>
-#include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
-#include <llvm/Support/Error.h>
-#include <llvm/Support/raw_ostream.h>
+
 import Parser;
 import Token;
 
@@ -27,7 +39,7 @@ int main() {
   LLVMInitializeNativeAsmParser();
   ExitOnError ExitOnErr;
 
-  auto jit = ExitOnErr(orc::KaleidoscopeJIT::Create());
+  auto jit = ExitOnErr(llvm::orc::LLJITBuilder().create());
   std::map<std::string, std::shared_ptr<ast::Prototype>> prototypes;
   std::map<std::string, std::unique_ptr<ResourceTrackerManager>> whatprovides;
 
@@ -67,7 +79,7 @@ int main() {
 
     auto ts_module =
         ThreadSafeModule(std::move(ctx.module), std::move(ctx.ctx));
-    ExitOnErr(jit->addModule(std::move(ts_module), resource_tracker));
+    ExitOnErr(jit->addIRModule(resource_tracker, std::move(ts_module)));
 
     // top level if the name is __anon_expr
     if (top && top->get_name() == "__anon_expr") {
@@ -75,7 +87,7 @@ int main() {
       // assert(ExprSymbol && "Function not found");
 
       // get function
-      double (*FP)() = expr_symbol.getAddress().toPtr<double (*)()>();
+      double (*FP)() = expr_symbol.toPtr<double (*)()>();
       fprintf(stderr, "Evaluated to %f\n", FP());
 
       // remove __anon_expr's module
