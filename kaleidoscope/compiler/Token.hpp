@@ -7,20 +7,22 @@
 
 class Token {
 #define TOKENTYPES                                                             \
-  TT(TypeError)                                                                \
-  TT(TypeEOF)                                                                  \
-  TT(TypeDef)                                                                  \
-  TT(TypeExtern)                                                               \
-  TT(TypeIdentifier)                                                           \
-  TT(TypeNumber)                                                               \
-  TT(TypeLpar)                                                                 \
-  TT(TypeRpar)                                                                 \
-  TT(TypeOperator)                                                             \
-  TT(TypeSemicolon)                                                            \
-  TT(TypeComma)                                                                \
-  TT(TypeIf)                                                                   \
-  TT(TypeThen)                                                                 \
-  TT(TypeElse)
+  TT(Error)                                                                    \
+  TT(EOF)                                                                      \
+  TT(Def)                                                                      \
+  TT(Extern)                                                                   \
+  TT(Identifier)                                                               \
+  TT(Number)                                                                   \
+  TT(Lpar)                                                                     \
+  TT(Rpar)                                                                     \
+  TT(Operator)                                                                 \
+  TT(Semicolon)                                                                \
+  TT(Comma)                                                                    \
+  TT(If)                                                                       \
+  TT(Then)                                                                     \
+  TT(Else)                                                                     \
+  TT(For)                                                                      \
+  TT(In)
 
 #define TT(x) #x,
   constexpr static char const *const type_str[] = {TOKENTYPES};
@@ -28,7 +30,7 @@ class Token {
 
 public:
   enum Type {
-#define TT(x) x,
+#define TT(x) Type##x,
     TOKENTYPES
 #undef TT
   } type;

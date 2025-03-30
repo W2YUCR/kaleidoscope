@@ -40,7 +40,8 @@ std::istream &operator>>(std::istream &s, Token &t) {
         std::unordered_map<std::string, Token::Type>{
             {"def", Token::TypeDef},   {"extern", Token::TypeExtern},
             {"if", Token::TypeIf},     {"then", Token::TypeThen},
-            {"else", Token::TypeElse},
+            {"else", Token::TypeElse}, {"for", Token::TypeFor},
+            {"in", Token::TypeIn},
         };
 
     if (auto e = special_ids.find(t.literal); e != special_ids.end())

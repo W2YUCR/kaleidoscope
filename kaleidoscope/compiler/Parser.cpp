@@ -190,6 +190,67 @@ llvm::Value *If::codegen(CodegenContext &ctx) {
   return phi;
 }
 
+For::For(const std::string &loop_var_name, std::unique_ptr<Expr> start,
+         std::unique_ptr<Expr> end, std::unique_ptr<Expr> step,
+         std::unique_ptr<Expr> body)
+    : loop_var_name(loop_var_name), start(std::move(start)),
+      end(::std::move(end)), step(std::move(step)), body(std::move(body)) {}
+
+llvm::Value *For::codegen(CodegenContext &ctx) {
+  auto function = ctx.builder->GetInsertBlock()->getParent();
+
+  auto loop = llvm::BasicBlock::Create(*ctx.ctx, "loop");
+  auto after_loop = llvm::BasicBlock::Create(*ctx.ctx, "afterloop");
+
+  // generate the entry into the loop
+  auto start_val = start->codegen(ctx);
+  auto entry = ctx.builder->GetInsertBlock();
+  assert(start_val);
+
+  ctx.builder->CreateBr(loop);
+
+  // Loop body
+  function->insert(function->end(), loop);
+  ctx.builder->SetInsertPoint(loop);
+  auto loop_var = ctx.builder->CreatePHI(llvm::Type::getDoubleTy(*ctx.ctx), 2);
+  loop_var->addIncoming(start_val, entry);
+
+  // shadow outer variable with the loop variable's name
+  llvm::Value *shadow = loop_var;
+  std::swap(shadow, ctx.named_values[loop_var_name]);
+
+  body->codegen(ctx);
+
+  // compute the next loop variable value
+  auto *step_value = step ? step->codegen(ctx)
+                          : llvm::ConstantFP::get(*ctx.ctx, llvm::APFloat(1.0));
+  assert(step_value);
+
+  auto next_var = ctx.builder->CreateFAdd(loop_var, step_value, "nextvalue");
+  auto end_var = end->codegen(ctx);
+  auto end_cond = ctx.builder->CreateFCmpONE(
+      end_var, llvm::ConstantFP::get(*ctx.ctx, llvm::APFloat(0.0)), "loopcond");
+  ctx.builder->CreateCondBr(end_cond, loop, after_loop);
+
+  // give the next value to the next iteration
+  auto loop_end = ctx.builder->GetInsertBlock();
+  loop_var->addIncoming(next_var, loop_end);
+
+  // generate exit of the loop
+  function->insert(function->end(), after_loop);
+  ctx.builder->SetInsertPoint(after_loop);
+
+  // unshadow outer variable
+  if (shadow) {
+    ctx.named_values[loop_var_name] = shadow;
+  } else {
+    ctx.named_values.erase(loop_var_name);
+  }
+
+  // value of a loop is 0.0
+  return llvm::Constant::getNullValue(llvm::Type::getDoubleTy(*ctx.ctx));
+}
+
 } // namespace ast
 
 Token &Parser::peek() {
@@ -280,6 +341,47 @@ std ::unique_ptr<ast::If> Parser::parse_if() {
                                    std::move(else_expr));
 }
 
+std::unique_ptr<ast::For> Parser::parse_for() {
+  assert(peek().type == Token::TypeFor);
+  next();
+
+  if (peek().type != Token::TypeIdentifier)
+    throw ParseError{};
+
+  auto loop_var = next().literal;
+
+  if (!(peek().type == Token::TypeOperator && peek().literal == "="))
+    throw ParseError{};
+  next();
+
+  auto start = parse_expression();
+
+  if (peek().type != Token::TypeComma)
+    throw ParseError{};
+  next();
+
+  auto end = parse_expression();
+  assert(end);
+
+  std::unique_ptr<ast::Expr> step;
+  if (peek().type == Token::TypeComma) {
+    next();
+
+    step = parse_expression();
+    assert(step);
+  }
+
+  if (peek().type != Token::TypeIn)
+    throw ParseError{};
+  next();
+
+  auto body = parse_expression();
+  assert(body);
+
+  return std::make_unique<ast::For>(loop_var, std::move(start), std::move(end),
+                                    std::move(step), std::move(body));
+}
+
 std ::unique_ptr<ast::Expr> Parser::parse_primary() {
   switch (peek().type) {
   default:
@@ -292,6 +394,8 @@ std ::unique_ptr<ast::Expr> Parser::parse_primary() {
     return parse_parenthesized();
   case Token::TypeIf:
     return parse_if();
+  case Token::TypeFor:
+    return parse_for();
   }
 }
 

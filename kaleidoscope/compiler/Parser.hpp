@@ -120,6 +120,18 @@ public:
   llvm::Value *codegen(CodegenContext &ctx) override;
 };
 
+class For : public Expr {
+  std::string loop_var_name;
+  std::unique_ptr<Expr> start, end, step, body;
+
+public:
+  For(const std::string &loop_var_name, std::unique_ptr<Expr> start,
+      std::unique_ptr<Expr> end, std::unique_ptr<Expr> step,
+      std::unique_ptr<Expr> body);
+
+  llvm::Value *codegen(CodegenContext &ctx) override;
+};
+
 } // namespace ast
 
 class Parser {
@@ -146,6 +158,7 @@ public:
   // either a variable or a call
   std::unique_ptr<ast::Expr> parse_identifier();
   std::unique_ptr<ast::If> parse_if();
+  std::unique_ptr<ast::For> parse_for();
   std::unique_ptr<ast::Expr> parse_primary();
   int get_token_precedence(std::string const &token);
   std::unique_ptr<ast::Expr> parse_expression();
