@@ -1,4 +1,9 @@
 #include "Parser.hpp"
+#include "kaleidoscope/compiler/Token.hpp"
+#include <llvm/ADT/APFloat.h>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/Constants.h>
+#include <memory>
 using namespace std;
 
 namespace ast {
@@ -138,6 +143,53 @@ llvm::Value *Function::codegen(CodegenContext &ctx) {
   return func;
 }
 
+If::If(std::unique_ptr<Expr> condition, std::unique_ptr<Expr> then_expr,
+       std::unique_ptr<Expr> else_expr)
+    : condition(std::move(condition)), then_expr(std::move(then_expr)),
+      else_expr(std::move(else_expr)) {};
+
+llvm::Value *If::codegen(CodegenContext &ctx) {
+  // the function containing the if statement
+  auto function = ctx.builder->GetInsertBlock()->getParent();
+
+  auto then_block = llvm::BasicBlock::Create(*ctx.ctx, "then");
+  auto else_block = llvm::BasicBlock::Create(*ctx.ctx, "else");
+
+  // the block both then and else will go to after completing
+  auto merge_block = llvm::BasicBlock::Create(*ctx.ctx, "ifcont");
+
+  // generate code to choose whick block to go to
+  auto cond = condition->codegen(ctx);
+  auto cond_bool = ctx.builder->CreateFCmpONE(
+      cond, llvm::ConstantFP::get(*ctx.ctx, llvm::APFloat(0.0)), "ifcond");
+  ctx.builder->CreateCondBr(cond_bool, then_block, else_block);
+
+  // generate then block
+  function->insert(function->end(), then_block);
+  ctx.builder->SetInsertPoint(then_block);
+  auto then_value = then_expr->codegen(ctx);
+  assert(then_value);
+  ctx.builder->CreateBr(merge_block);
+  auto then_end = ctx.builder->GetInsertBlock();
+
+  // generate else block
+  function->insert(function->end(), else_block);
+  ctx.builder->SetInsertPoint(else_block);
+  auto else_value = else_expr->codegen(ctx);
+  assert(else_value);
+  ctx.builder->CreateBr(merge_block);
+  auto else_end = ctx.builder->GetInsertBlock();
+
+  // generate merge block
+  function->insert(function->end(), merge_block);
+  ctx.builder->SetInsertPoint(merge_block);
+  auto phi =
+      ctx.builder->CreatePHI(llvm::Type::getDoubleTy(*ctx.ctx), 2, "iftmp");
+  phi->addIncoming(then_value, then_end);
+  phi->addIncoming(else_value, else_end);
+  return phi;
+}
+
 } // namespace ast
 
 Token &Parser::peek() {
@@ -203,6 +255,31 @@ std ::unique_ptr<ast::Expr> Parser::parse_identifier() {
                                          std::move(args));
 }
 
+std ::unique_ptr<ast::If> Parser::parse_if() {
+  assert(peek().type = Token::TypeIf);
+  next();
+
+  auto cond = parse_expression();
+  assert(cond);
+
+  if (peek().type != Token::TypeThen)
+    throw ParseError{};
+  next();
+
+  auto then = parse_expression();
+  assert(then);
+
+  if (peek().type != Token::TypeElse)
+    throw ParseError{};
+  next();
+
+  auto else_expr = parse_expression();
+  assert(else_expr);
+
+  return std::make_unique<ast::If>(std::move(cond), std::move(then),
+                                   std::move(else_expr));
+}
+
 std ::unique_ptr<ast::Expr> Parser::parse_primary() {
   switch (peek().type) {
   default:
@@ -213,6 +290,8 @@ std ::unique_ptr<ast::Expr> Parser::parse_primary() {
     return parse_number();
   case Token::TypeLpar:
     return parse_parenthesized();
+  case Token::TypeIf:
+    return parse_if();
   }
 }
 

@@ -17,7 +17,10 @@ class Token {
   TT(TypeRpar)                                                                 \
   TT(TypeOperator)                                                             \
   TT(TypeSemicolon)                                                            \
-  TT(TypeComma)
+  TT(TypeComma)                                                                \
+  TT(TypeIf)                                                                   \
+  TT(TypeThen)                                                                 \
+  TT(TypeElse)
 
 #define TT(x) #x,
   constexpr static char const *const type_str[] = {TOKENTYPES};

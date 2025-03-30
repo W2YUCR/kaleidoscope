@@ -109,6 +109,17 @@ public:
   llvm::Value *codegen(CodegenContext &ctx) override;
 };
 
+class If : public Expr {
+  std::unique_ptr<Expr> condition;
+  std::unique_ptr<Expr> then_expr;
+  std::unique_ptr<Expr> else_expr;
+
+public:
+  If(std::unique_ptr<Expr> condition, std::unique_ptr<Expr> then_expr,
+     std::unique_ptr<Expr> else_expr);
+  llvm::Value *codegen(CodegenContext &ctx) override;
+};
+
 } // namespace ast
 
 class Parser {
@@ -133,8 +144,9 @@ public:
   std::unique_ptr<ast::Expr> parse_parenthesized();
 
   // either a variable or a call
-  std ::unique_ptr<ast::Expr> parse_identifier();
-  std ::unique_ptr<ast::Expr> parse_primary();
+  std::unique_ptr<ast::Expr> parse_identifier();
+  std::unique_ptr<ast::If> parse_if();
+  std::unique_ptr<ast::Expr> parse_primary();
   int get_token_precedence(std::string const &token);
   std::unique_ptr<ast::Expr> parse_expression();
   std::unique_ptr<ast::Expr> parse_binary_rhs(int lhs_prec,

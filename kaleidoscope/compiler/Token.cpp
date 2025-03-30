@@ -1,4 +1,5 @@
 #include "Token.hpp"
+#include <unordered_map>
 
 bool Token::operator==(const Token &that) const {
   return this->type == that.type && this->literal == that.literal &&
@@ -35,10 +36,16 @@ std::istream &operator>>(std::istream &s, Token &t) {
     s.unget();
     s.clear();
 
-    if (t.literal == "def")
-      t.type = Token::TypeDef;
-    if (t.literal == "extern")
-      t.type = Token::TypeExtern;
+    static auto const special_ids =
+        std::unordered_map<std::string, Token::Type>{
+            {"def", Token::TypeDef},   {"extern", Token::TypeExtern},
+            {"if", Token::TypeIf},     {"then", Token::TypeThen},
+            {"else", Token::TypeElse},
+        };
+
+    if (auto e = special_ids.find(t.literal); e != special_ids.end())
+      t.type = e->second;
+
     return s;
   }
 
