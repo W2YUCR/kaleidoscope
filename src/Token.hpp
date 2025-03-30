@@ -1,8 +1,6 @@
 #ifndef TOKEN_HPP
 #define TOKEN_HPP
 
-#include <cctype>
-#include <compare>
 #include <istream>
 #include <ostream>
 #include <string>
