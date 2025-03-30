@@ -1,9 +1,9 @@
+#include "../src/Token.hpp"
 #include <cstdlib>
 #include <functional>
 #include <initializer_list>
 #include <iostream>
 #include <unordered_map>
-import Token;
 
 #include <sstream>
 

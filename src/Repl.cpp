@@ -1,23 +1,18 @@
-#include "llvm-c/Target.h"
-#include "llvm/ExecutionEngine/JITSymbol.h"
+#include "Parser.hpp"
+#include "Token.hpp"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
-
 #include <iostream>
-
-import Parser;
-import Token;
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -34,9 +29,9 @@ int main() {
   // somehow regenerate dependent functions)
   using namespace llvm;
   using namespace llvm::orc;
-  LLVMInitializeNativeTarget();
-  LLVMInitializeNativeAsmPrinter();
-  LLVMInitializeNativeAsmParser();
+  InitializeNativeTarget();
+  InitializeNativeTargetAsmParser();
+  InitializeNativeTargetAsmPrinter();
   ExitOnError ExitOnErr;
 
   auto jit = ExitOnErr(llvm::orc::LLJITBuilder().create());
