@@ -1,10 +1,12 @@
 #include "Token.hpp"
 
-bool Token::operator==(const Token &) const = default;
-bool Token::operator!=(const Token &) const = default;
+bool Token::operator==(const Token &that) const {
+  return this->type == that.type && this->literal == that.literal &&
+         this->number == that.number;
+};
+bool Token::operator!=(const Token &that) const { return !(*this == that); };
 
 std::istream &operator>>(std::istream &s, Token &t) {
-  using enum Token::Type;
   if (s.fail())
     return s;
   t = {};
@@ -17,7 +19,7 @@ std::istream &operator>>(std::istream &s, Token &t) {
 
   if (s.eof()) {
     {
-      t.type = TypeEOF;
+      t.type = Token::TypeEOF;
       t.literal = "EOF";
     }
     return s;
@@ -25,7 +27,7 @@ std::istream &operator>>(std::istream &s, Token &t) {
 
   // identifier: [a-Z][0-9a-Z]*
   if (isalpha(c)) {
-    t.type = TypeIdentifier;
+    t.type = Token::TypeIdentifier;
     while (isalnum(c)) {
       t.literal.push_back(c);
       c = s.get();
@@ -34,15 +36,15 @@ std::istream &operator>>(std::istream &s, Token &t) {
     s.clear();
 
     if (t.literal == "def")
-      t.type = TypeDef;
+      t.type = Token::TypeDef;
     if (t.literal == "extern")
-      t.type = TypeExtern;
+      t.type = Token::TypeExtern;
     return s;
   }
 
   // number: [0-9]*(\.[0-9]*)?
   if (isdigit(c) || c == '.') {
-    t.type = TypeNumber;
+    t.type = Token::TypeNumber;
 
     while (isdigit(c)) {
       t.literal.push_back(c);
@@ -64,24 +66,24 @@ std::istream &operator>>(std::istream &s, Token &t) {
 
   switch (c) {
   case '(':
-    t.type = TypeLpar;
+    t.type = Token::TypeLpar;
     t.literal = '(';
     return s;
   case ')':
-    t.type = TypeRpar;
+    t.type = Token::TypeRpar;
     t.literal = ')';
     return s;
   case ';':
-    t.type = TypeSemicolon;
+    t.type = Token::TypeSemicolon;
     t.literal = ';';
     return s;
   case ',':
-    t.type = TypeComma;
+    t.type = Token::TypeComma;
     t.literal = ',';
     return s;
   }
 
-  t.type = TypeOperator;
+  t.type = Token::TypeOperator;
 
   do {
     t.literal.push_back(c);

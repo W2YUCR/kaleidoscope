@@ -44,24 +44,34 @@ std::unordered_map<std::string, std::function<int()>> const tests = {
      }},
     {"Function",
      []() {
-       using enum Token::Type;
-
        // Example code from
        // https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/LangImpl01.html
        auto expected = std::vector<Token>{
-           {TypeDef, "def", 0},        {TypeIdentifier, "fib", 0},
-           {TypeLpar, "(", 0},         {TypeIdentifier, "x", 0},
-           {TypeRpar, ")", 0},         {TypeIdentifier, "if", 0},
-           {TypeIdentifier, "x", 0},   {TypeOperator, "<", 0},
-           {TypeNumber, "3", 3},       {TypeIdentifier, "then", 0},
-           {TypeNumber, "1", 1},       {TypeIdentifier, "else", 0},
-           {TypeIdentifier, "fib", 0}, {TypeLpar, "(", 0},
-           {TypeIdentifier, "x", 0},   {TypeOperator, "-", 0},
-           {TypeNumber, "1", 1},       {TypeRpar, ")", 0},
-           {TypeOperator, "+", 0},     {TypeIdentifier, "fib", 0},
-           {TypeLpar, "(", 0},         {TypeIdentifier, "x", 0},
-           {TypeOperator, "-", 0},     {TypeNumber, "2", 2},
-           {TypeRpar, ")", 0},
+           {Token::TypeDef, "def", 0},
+           {Token::TypeIdentifier, "fib", 0},
+           {Token::TypeLpar, "(", 0},
+           {Token::TypeIdentifier, "x", 0},
+           {Token::TypeRpar, ")", 0},
+           {Token::TypeIdentifier, "if", 0},
+           {Token::TypeIdentifier, "x", 0},
+           {Token::TypeOperator, "<", 0},
+           {Token::TypeNumber, "3", 3},
+           {Token::TypeIdentifier, "then", 0},
+           {Token::TypeNumber, "1", 1},
+           {Token::TypeIdentifier, "else", 0},
+           {Token::TypeIdentifier, "fib", 0},
+           {Token::TypeLpar, "(", 0},
+           {Token::TypeIdentifier, "x", 0},
+           {Token::TypeOperator, "-", 0},
+           {Token::TypeNumber, "1", 1},
+           {Token::TypeRpar, ")", 0},
+           {Token::TypeOperator, "+", 0},
+           {Token::TypeIdentifier, "fib", 0},
+           {Token::TypeLpar, "(", 0},
+           {Token::TypeIdentifier, "x", 0},
+           {Token::TypeOperator, "-", 0},
+           {Token::TypeNumber, "2", 2},
+           {Token::TypeRpar, ")", 0},
        };
        return test_tokenize("def fib(x)\n"
                             "  if x < 3 then\n"

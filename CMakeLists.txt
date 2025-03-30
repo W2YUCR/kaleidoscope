@@ -10,7 +10,7 @@ llvm_map_components_to_libnames(llvm_libs support core irreader orcjit native)
 
 include(CTest)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
