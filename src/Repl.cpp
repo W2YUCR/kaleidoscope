@@ -1,5 +1,5 @@
-#include "Parser.hpp"
-#include "Token.hpp"
+#include "compiler/Parser.hpp"
+#include "compiler/Token.hpp"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"

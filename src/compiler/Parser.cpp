@@ -1,4 +1,3 @@
-#define KALEIDOSCOPE_DEFINE
 #include "Parser.hpp"
 using namespace std;
 

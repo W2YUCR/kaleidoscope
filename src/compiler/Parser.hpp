@@ -14,12 +14,6 @@
 #include <memory>
 #include <vector>
 
-#ifdef KALEIDOSCOPE_DEFINE
-#define KALEIDOSCOPE_BODY(x) x
-#else
-#define KALEIDOSCOPE_BODY(x) ;
-#endif
-
 struct CodegenException : std::exception {
   char const *what() const noexcept override { return "codegen error"; }
 };
@@ -255,7 +249,5 @@ public:
 
   std::unique_ptr<ast::Expr> parse(std::istream &s);
 };
-
-#undef KALEIDOSCOPE_BODY
 
 #endif

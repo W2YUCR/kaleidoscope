@@ -1,4 +1,4 @@
-#include "../src/Token.hpp"
+#include "src/compiler/Token.hpp"
 #include <functional>
 #include <initializer_list>
 #include <iostream>
