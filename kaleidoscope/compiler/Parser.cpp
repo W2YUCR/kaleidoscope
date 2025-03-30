@@ -3,10 +3,139 @@ using namespace std;
 
 namespace ast {
 
+Expr::~Expr() = default;
+
 NumberExpr::NumberExpr(double value) : value(value) {}
 
 llvm::Value *NumberExpr::codegen(CodegenContext &ctx) {
   return llvm::ConstantFP::get(*ctx.ctx, llvm::APFloat(value));
+}
+
+VariableExpr::VariableExpr(std::string name) : name(name) {}
+
+BinaryExpr::BinaryExpr(std::string op, std::unique_ptr<Expr> lhs,
+                       std::unique_ptr<Expr> rhs)
+    : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+
+llvm::Value *VariableExpr::codegen(CodegenContext &ctx) {
+  auto e = ctx.named_values.find(name);
+  if (e == ctx.named_values.end())
+    throw CodegenException{};
+  return e->second;
+}
+
+llvm::Value *BinaryExpr::codegen(CodegenContext &ctx) {
+  auto lh = lhs->codegen(ctx);
+  auto rh = rhs->codegen(ctx);
+
+  static auto const cg =
+      std::map<std::string,
+               std::function<llvm::Value *(CodegenContext & ctx, llvm::Value *,
+                                           llvm::Value *)>>{
+          {"+",
+           [](CodegenContext &ctx, llvm::Value *lh, llvm::Value *rh) {
+             return ctx.builder->CreateFAdd(lh, rh, "addtmp");
+           }},
+          {"-",
+           [](CodegenContext &ctx, llvm::Value *lh, llvm::Value *rh) {
+             return ctx.builder->CreateFSub(lh, rh, "addtmp");
+           }},
+          {"*",
+           [](CodegenContext &ctx, llvm::Value *lh, llvm::Value *rh) {
+             return ctx.builder->CreateFMul(lh, rh, "addtmp");
+           }},
+          {"<",
+           [](CodegenContext &ctx, llvm::Value *lh, llvm::Value *rh) {
+             lh = ctx.builder->CreateFCmpULT(lh, rh, "cmptmp");
+             // Convert bool 0/1 to double 0.0 or 1.0
+             return ctx.builder->CreateUIToFP(
+                 lh, llvm::Type::getDoubleTy(*ctx.ctx), "booltmp");
+           }},
+      };
+
+  if (auto e = cg.find(op); e != cg.end()) {
+    return e->second(ctx, lh, rh);
+  }
+  throw CodegenException{};
+}
+
+CallExpr::CallExpr(std::string callee,
+                   std::vector<std::unique_ptr<Expr>> arguments)
+    : callee(std::move(callee)), arguments(std::move(arguments)) {}
+
+llvm::Value *CallExpr::codegen(CodegenContext &ctx) {
+  // Look up the name in the global module table.
+  auto fn = ctx.get_proto(callee);
+  if (!fn)
+    throw CodegenException{};
+
+  // If argument mismatch error.
+  if (fn->arg_size() != arguments.size())
+    throw CodegenException{};
+
+  std::vector<llvm::Value *> args;
+  for (auto &arg : arguments) {
+    args.push_back(arg->codegen(ctx));
+  }
+
+  return ctx.builder->CreateCall(fn, args, "calltmp");
+}
+
+Prototype::Prototype(std::string name, std::vector<std::string> arguments)
+    : name(std::move(name)), arguments(std::move(arguments)) {}
+
+const std::string &Prototype::get_name() const { return name; }
+
+llvm::Function *Prototype::codegen(CodegenContext &ctx) {
+  std::vector<llvm::Type *> parameters(arguments.size(),
+                                       llvm::Type::getDoubleTy(*ctx.ctx));
+
+  auto func_type = llvm::FunctionType::get(llvm::Type::getDoubleTy(*ctx.ctx),
+                                           parameters, false);
+
+  auto func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage,
+                                     name, ctx.module.get());
+
+  auto arg = arguments.begin();
+  for (auto &func_arg : func->args())
+    func_arg.setName(*arg++);
+
+  return func;
+}
+
+Function::Function(std::unique_ptr<Prototype> prototype,
+                   std::unique_ptr<Expr> body)
+    : prototype(std::move(prototype)), body(std::move(body)) {}
+
+std::string const &Function::get_name() const { return prototype->get_name(); }
+
+llvm::Value *Function::codegen(CodegenContext &ctx) {
+  (*ctx.prototypes)[prototype->get_name()] = prototype;
+  auto func = ctx.get_proto(prototype->get_name());
+  if (!func)
+    func = prototype->codegen(ctx);
+
+  auto *block = llvm::BasicBlock::Create(*ctx.ctx, "entry", func);
+  ctx.builder->SetInsertPoint(block);
+
+  // Record the function arguments in the NamedValues map.
+  ctx.named_values.clear();
+  for (auto &arg : func->args())
+    ctx.named_values[std::string(arg.getName())] = &arg;
+
+  llvm::Value *ret;
+  try {
+    ret = body->codegen(ctx);
+  } catch (CodegenException c) {
+    func->eraseFromParent();
+    throw c;
+  }
+
+  ctx.builder->CreateRet(ret);
+
+  verifyFunction(*func);
+
+  return func;
 }
 
 } // namespace ast
