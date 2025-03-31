@@ -253,17 +253,19 @@ llvm::Value *For::codegen(CodegenContext &ctx) {
 
 } // namespace ast
 
-Token &Parser::peek() {
-  if (peeking)
+bool Parser::peeking() { return _peeking; }
+
+Token const &Parser::peek() {
+  if (_peeking)
     return current;
-  peeking = true;
+  _peeking = true;
   *stream >> current;
   return current;
 }
 
-Token &Parser::next() {
+Token const &Parser::next() {
   peek();
-  peeking = false;
+  _peeking = false;
   return current;
 }
 
@@ -317,7 +319,7 @@ std ::unique_ptr<ast::Expr> Parser::parse_identifier() {
 }
 
 std ::unique_ptr<ast::If> Parser::parse_if() {
-  assert(peek().type = Token::TypeIf);
+  assert(peek().type == Token::TypeIf);
   next();
 
   auto cond = parse_expression();
@@ -474,7 +476,7 @@ char const *Parser::ParseError::what() const noexcept { return "parser error"; }
 
 Parser::Parser()
     : binary_precedence{{"<", 10}, {"+", 20}, {"-", 20}, {"*", 40}},
-      peeking(false) {}
+      _peeking(false) {}
 
 std::unique_ptr<ast::Expr> Parser::parse(std::istream &s) {
   stream = &s;

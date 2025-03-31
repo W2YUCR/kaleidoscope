@@ -5,6 +5,7 @@ bool Token::operator==(const Token &that) const {
   return this->type == that.type && this->literal == that.literal &&
          this->number == that.number;
 };
+
 bool Token::operator!=(const Token &that) const { return !(*this == that); };
 
 std::istream &operator>>(std::istream &s, Token &t) {

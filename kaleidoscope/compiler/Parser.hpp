@@ -144,12 +144,13 @@ private:
   std::map<std::string, int> binary_precedence;
 
   Token current;
-  bool peeking;
+  bool _peeking;
   std::istream *stream;
 
 public:
-  Token &peek();
-  Token &next();
+  bool peeking();
+  Token const &peek();
+  Token const &next();
 
   // <NumberExpr> ::= <number>
   std::unique_ptr<ast::NumberExpr> parse_number();

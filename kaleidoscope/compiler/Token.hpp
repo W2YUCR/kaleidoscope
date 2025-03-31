@@ -43,7 +43,7 @@ public:
 
   friend std::istream &operator>>(std::istream &s, Token &t);
 
-  friend std::ostream &operator<<(std::ostream &s, Token &t) {
+  friend std::ostream &operator<<(std::ostream &s, Token const &t) {
     return s << "{" << t.type << ", \"" << t.literal << "\", " << t.number
              << "}";
   }

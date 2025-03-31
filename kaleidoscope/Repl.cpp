@@ -13,6 +13,9 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 #include <iostream>
+#include <istream>
+#include <llvm/ADT/StringMapEntry.h>
+#include <string>
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -22,6 +25,31 @@ class ResourceTrackerManager {
 public:
   ResourceTrackerManager(ResourceTrackerSP rt) : rt(rt) {}
   ~ResourceTrackerManager() { ExitOnError()(rt->remove()); }
+};
+
+class TeeString : public std::streambuf {
+public:
+  std::istream *source;
+  std::string teed;
+  TeeString(std::istream *source) : source(source) {}
+
+  // supply some string to start at the end of.
+  TeeString(std::istream *source, std::string const &precursor)
+      : source(source), teed(precursor) {
+    setg(teed.data(), teed.data() + teed.size(), teed.data() + teed.size());
+  }
+  virtual int_type underflow() override {
+    auto c = source->get();
+    if (c == EOF)
+      return EOF;
+    teed.push_back(c);
+    setg(teed.data(), teed.data() + teed.size() - 1, teed.data() + teed.size());
+    return c;
+  }
+
+  // since ungetc isn't passed to the underlying stream, past the used size is
+  // where the ungotten characters are.
+  size_t used() const { return gptr() - eback(); }
 };
 
 int main() {
@@ -46,11 +74,25 @@ int main() {
     // read
     std::unique_ptr<ast::Expr> ast;
 
+    TeeString tee = p.peeking() ? TeeString{&std::cin, p.peek().literal}
+                                : TeeString{&std::cin};
+    std::istream tee_stream(&tee);
+
     try {
-      ast = p.parse(std::cin);
+      ast = p.parse(tee_stream);
     } catch (Parser::ParseError e) {
       std::cerr << e.what() << '\n';
-      std::cerr << "Errored on: " << p.next() << "\n";
+      std::string already_read = tee.teed;
+      std::string rest_of_line;
+      std::getline(std::cin, rest_of_line);
+      std::cerr << already_read << rest_of_line << '\n';
+
+      for (auto i = int(tee.used()) - int(p.peek().literal.size()); i-- > 0;) {
+        if (tee.teed[i] == '\n')
+          break;
+        std::cerr << ' ';
+      }
+      std::cerr << "^ Unexpected " << p.next() << "\n";
       continue;
     }
 
