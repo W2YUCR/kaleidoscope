@@ -12,6 +12,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
+#include <fstream>
 #include <iostream>
 #include <istream>
 #include <llvm/ADT/StringMapEntry.h>
@@ -52,7 +53,7 @@ public:
   size_t used() const { return gptr() - eback(); }
 };
 
-int main() {
+int run(std::istream &input, bool interactive = false) {
   // todo: "taint" functions' removability if another function depends on it (or
   // somehow regenerate dependent functions)
   using namespace llvm;
@@ -68,14 +69,16 @@ int main() {
 
   Parser p;
   for (;;) {
-    CodegenContext ctx(jit.get(), &prototypes);
-    std::cerr << ">>> ";
+    // prompt
+    if (interactive)
+      std::cerr << ">>> ";
 
     // read
+    CodegenContext ctx(jit.get(), &prototypes);
     std::unique_ptr<ast::Expr> ast;
 
-    TeeString tee = p.peeking() ? TeeString{&std::cin, p.peek().literal}
-                                : TeeString{&std::cin};
+    TeeString tee =
+        p.peeking() ? TeeString{&input, p.peek().literal} : TeeString{&input};
     std::istream tee_stream(&tee);
 
     try {
@@ -84,18 +87,22 @@ int main() {
       std::cerr << e.what() << '\n';
       std::string already_read = tee.teed;
       std::string rest_of_line;
-      std::getline(std::cin, rest_of_line);
+      auto used = tee.used();
+      std::getline(tee_stream, rest_of_line);
       std::cerr << already_read << rest_of_line << '\n';
 
-      for (auto i = int(tee.used()) - int(p.peek().literal.size()); i-- > 0;) {
+      for (auto i = int(used) - int(p.peek().literal.size()); i-- > 0;) {
         if (tee.teed[i] == '\n')
           break;
         std::cerr << ' ';
       }
       std::cerr << "^ Unexpected " << p.next() << "\n";
+      if (!interactive)
+        return 1;
       continue;
     }
 
+    // compile
     Value *code;
     try {
       code = ast->codegen(ctx);
@@ -103,6 +110,8 @@ int main() {
       llvm::errs() << "\n";
     } catch (CodegenException e) {
       std::cerr << e.what() << '\n';
+      if (!interactive)
+        return 1;
       continue;
     }
 
@@ -118,7 +127,7 @@ int main() {
         ThreadSafeModule(std::move(ctx.module), std::move(ctx.ctx));
     ExitOnErr(jit->addIRModule(resource_tracker, std::move(ts_module)));
 
-    // top level if the name is __anon_expr
+    // evaluate if top level)
     if (top && top->get_name() == "__anon_expr") {
       auto expr_symbol = ExitOnErr(jit->lookup("__anon_expr"));
       // assert(ExprSymbol && "Function not found");
@@ -131,8 +140,24 @@ int main() {
       whatprovides.erase(whatprovides.find("__anon_expr"));
     }
 
-    // not toplevel so not managed by whatprovides
+    // not top level so not managed by whatprovides
     if (!top)
       ExitOnErr(resource_tracker->remove());
   }
+}
+
+int main(int argc, char *argv[]) {
+  if (argc < 2)
+    return run(std::cin, true);
+
+  if (argc == 2) {
+    std::ifstream input(argv[1]);
+    if (input.fail()) {
+      std::cerr << "Failed to open " << argv[1] << ".";
+      return 1;
+    }
+    return run(input, false);
+  }
+
+  std::cerr << "Usage: " << argv[0] << " [SCRIPT]";
 }

@@ -48,7 +48,7 @@ public:
              << "}";
   }
 
-  friend std::ostream &operator<<(std::ostream &s, Type &t) {
+  friend std::ostream &operator<<(std::ostream &s, Type const &t) {
     return s << type_str[t];
   }
 };
